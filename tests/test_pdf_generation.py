@@ -28,16 +28,17 @@ def _get_content(path: pathlib.Path) -> str:
 
 def test_custom_fields(tmp_path):
     out = tmp_path / "out.pdf"
+    file_id = "1234567890abcdef1234567890abcdef"
     generate_pdf(
         "01.01.2025 00:00 мск",
         "OP123",
         "ID456",
-        TEMPLATE_VALUES[3],
+        file_id,
         out,
         form_date="02.02.2025 01:01 мск",
         amount="1,23 RUR",
         commission="1 RUR",
-        recipient="Иван Иванович ",
+        recipient="Иван Иванов ",
         phone="79998887766",
         bank="Банк",
         account="111111",
@@ -46,4 +47,16 @@ def test_custom_fields(tmp_path):
     content = _get_content(out)
     assert _encode("02.02.2025 01:01 мск") in content
     assert _encode("1,23 RUR ") in content
-    assert _encode("Иван Иванович ") in content
+    assert _encode("1 RUR ") in content
+    assert _encode("01.01.2025 00:00 мск ") in content
+    assert _encode("OP123 ") in content
+    assert _encode("Иван Иванов ") in content
+    assert _encode("79998887766") in content
+    assert _encode("Банк") in content
+    assert _encode("111111") in content
+    assert _encode("ID456") in content
+    assert _encode("Тест") in content
+    trailer = out.read_bytes()[-100:]
+    assert (
+        f"<{file_id}><{file_id}>".encode("ascii") in trailer
+    )
