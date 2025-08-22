@@ -2,6 +2,42 @@ import zlib, re, sys, pathlib, io
 from typing import Dict
 
 TEMPLATE_PATH = pathlib.Path('pdf 16.pdf')
+CHARMAP_PATH = pathlib.Path('pdf.pdf')
+
+
+def _extract_char_map(path: pathlib.Path) -> Dict[str, str]:
+    """Return mapping of characters to hex codes from a PDF file."""
+    from PyPDF2 import PdfReader
+
+    char_to_code: Dict[str, str] = {}
+    reader = PdfReader(path.open('rb'))
+    for page in reader.pages:
+        resources = page.get('/Resources')
+        if resources is None:
+            continue
+        resources = resources.get_object()
+        fonts = resources.get('/Font', {})
+        for font in fonts.values():
+            font_obj = font.get_object()
+            if '/ToUnicode' not in font_obj:
+                continue
+            cmap = font_obj['/ToUnicode'].get_data().decode('latin1')
+            for line in cmap.splitlines():
+                if line.startswith('<') and '>' in line:
+                    parts = line.split()
+                    if (
+                        len(parts) >= 2
+                        and parts[0].startswith('<')
+                        and parts[1].startswith('<')
+                    ):
+                        src = parts[0][1:-1]
+                        dst = parts[1][1:-1]
+                        try:
+                            ch = bytes.fromhex(dst).decode('utf-16-be')
+                        except Exception:
+                            continue
+                        char_to_code[ch] = src
+    return char_to_code
 
 # We will load template and extract objects on first run
 
@@ -31,20 +67,24 @@ def _parse_template():
     reader = PdfReader(io.BytesIO(data))
     tounicode = reader.get_object(IndirectObject(14,0,reader))._data
     cmap = zlib.decompress(tounicode).decode('latin1')
-    code_to_char: Dict[str,str] = {}
-    char_to_code: Dict[str,str] = {}
+    code_to_char: Dict[str, str] = {}
+    char_to_code: Dict[str, str] = {}
     for line in cmap.splitlines():
         if line.startswith('<') and '>' in line:
-            parts=line.split()
-            if len(parts)>=2 and parts[0].startswith('<') and parts[1].startswith('<'):
-                src=parts[0][1:-1]
-                dst=parts[1][1:-1]
+            parts = line.split()
+            if len(parts) >= 2 and parts[0].startswith('<') and parts[1].startswith('<'):
+                src = parts[0][1:-1]
+                dst = parts[1][1:-1]
                 try:
-                    ch=bytes.fromhex(dst).decode('utf-16-be')
+                    ch = bytes.fromhex(dst).decode('utf-16-be')
                 except Exception:
                     continue
-                code_to_char[src]=ch
-                char_to_code[ch]=src
+                code_to_char[src] = ch
+                char_to_code[ch] = src
+    if CHARMAP_PATH.exists():
+        extra = _extract_char_map(CHARMAP_PATH)
+        for ch, code in extra.items():
+            char_to_code.setdefault(ch, code)
     # get uncompressed content template
     raw_content = reader.get_object(IndirectObject(9,0,reader))._data
     uncomp = zlib.decompress(raw_content).decode('latin1')
