@@ -120,7 +120,10 @@ def generate_pdf(
     form_date: str = '22.08.2025 11:28 мск',
     amount: str = '0,01 RUR',
     commission: str = '0 RUR',
-    recipient: str = 'Михаил Сергеевич К',
+    # The recipient field in the template contains a trailing space
+    # before the line break. Keep the same default so regenerating the
+    # reference PDF does not rely on implicit padding logic.
+    recipient: str = 'Михаил Сергеевич К ',
     phone: str = '7й526247787',
     bank: str = 'В-Банк',
     account: str = '408178100088600й7530',
