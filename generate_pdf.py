@@ -1,4 +1,4 @@
-import zlib, re, sys, pathlib, io
+import zlib, re, pathlib, io
 from typing import Dict
 
 TEMPLATE_PATH = pathlib.Path('pdf 16.pdf')
@@ -98,16 +98,54 @@ def _encode(text: str) -> str:
     text = text.replace(' ', '\u00A0')
     return ''.join(CHAR_TO_CODE[ch] for ch in text)
 
-OLD_DATE = _encode('18.08.2025 17:34:11 мск')
-OLD_OPER = _encode('C421808250875533')
+OLD_FORM_DATE = _encode('22.08.2025 11:28 мск')
+OLD_AMOUNT = _encode('0,01 RUR ')
+OLD_COMMISSION = _encode('0 RUR ')
+OLD_DATE = _encode('18.08.2025 17:34:11 мск ')
+OLD_OPER = _encode('C421808250875533 ')
+OLD_FIO = _encode('Михаил Сергеевич К ')
+OLD_PHONE = _encode('7й526247787')
+OLD_BANK = _encode('В-Банк')
+OLD_ACCOUNT = _encode('408178100088600й7530')
 OLD_ID   = _encode('A52301434118691P0000060011571101')
+OLD_MESSAGE = _encode('Перевод денеАнЕГ средств')
 
-def generate_pdf(date_time: str, operation: str, sbp_id: str, file_id: str, out_path: pathlib.Path):
+def generate_pdf(
+    date_time: str,
+    operation: str,
+    sbp_id: str,
+    file_id: str,
+    out_path: pathlib.Path,
+    *,
+    form_date: str = '22.08.2025 11:28 мск',
+    amount: str = '0,01 RUR',
+    commission: str = '0 RUR',
+    recipient: str = 'Михаил Сергеевич К',
+    phone: str = '7й526247787',
+    bank: str = 'В-Банк',
+    account: str = '408178100088600й7530',
+    message: str = 'Перевод денеАнЕГ средств',
+):
     # prepare new uncompressed content
     new_content = CONTENT_TEMPLATE
-    new_content = new_content.replace(f'<{OLD_DATE}>', f'<{_encode(date_time)}>')
-    new_content = new_content.replace(f'<{OLD_OPER}>', f'<{_encode(operation)}>')
-    new_content = new_content.replace(f'<{OLD_ID}>',   f'<{_encode(sbp_id)}>')
+    replacements = {
+        OLD_FORM_DATE: form_date,
+        OLD_AMOUNT: amount,
+        OLD_COMMISSION: commission,
+        OLD_DATE: date_time,
+        OLD_OPER: operation,
+        OLD_FIO: recipient,
+        OLD_PHONE: phone,
+        OLD_BANK: bank,
+        OLD_ACCOUNT: account,
+        OLD_ID: sbp_id,
+        OLD_MESSAGE: message,
+    }
+    for old, new in replacements.items():
+        enc_new = _encode(new)
+        if old.endswith('000A') and not enc_new.endswith('000A'):
+            enc_new += '000A'
+        new_content = new_content.replace(f'<{old}>', f'<{enc_new}>')
     comp = zlib.compress(new_content.encode('latin1'), 6)
     obj9 = (
         b"9 0 obj\r\n" +
@@ -135,7 +173,36 @@ def generate_pdf(date_time: str, operation: str, sbp_id: str, file_id: str, out_
     out_path.write_bytes(out)
 
 if __name__ == '__main__':
-    if len(sys.argv) != 6:
-        print('Usage: generate_pdf.py DATE_TIME OPERATION SBP_ID FILE_ID OUTPUT')
-        sys.exit(1)
-    generate_pdf(sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], pathlib.Path(sys.argv[5]))
+    import argparse
+
+    parser = argparse.ArgumentParser(description='Generate PDF receipt')
+    parser.add_argument('date_time')
+    parser.add_argument('operation')
+    parser.add_argument('sbp_id')
+    parser.add_argument('file_id')
+    parser.add_argument('output')
+    parser.add_argument('--form-date', default='22.08.2025 11:28 мск')
+    parser.add_argument('--amount', default='0,01 RUR')
+    parser.add_argument('--commission', default='0 RUR')
+    parser.add_argument('--recipient', default='Михаил Сергеевич К ')
+    parser.add_argument('--phone', default='7й526247787')
+    parser.add_argument('--bank', default='В-Банк')
+    parser.add_argument('--account', default='408178100088600й7530')
+    parser.add_argument('--message', default='Перевод денеАнЕГ средств')
+    args = parser.parse_args()
+
+    generate_pdf(
+        args.date_time,
+        args.operation,
+        args.sbp_id,
+        args.file_id,
+        pathlib.Path(args.output),
+        form_date=args.form_date,
+        amount=args.amount,
+        commission=args.commission,
+        recipient=args.recipient,
+        phone=args.phone,
+        bank=args.bank,
+        account=args.account,
+        message=args.message,
+    )
