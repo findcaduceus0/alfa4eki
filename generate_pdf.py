@@ -1,4 +1,5 @@
 import zlib, pathlib, io
+from dataclasses import dataclass
 from datetime import datetime, timezone, timedelta
 from typing import Dict, Tuple
 
@@ -98,6 +99,21 @@ OBJECTS, ORDER, CHAR_TO_CODE, CONTENT_TEMPLATE = _parse_template()
 _MSK_TZ = timezone(timedelta(hours=3))
 
 
+@dataclass
+class ReceiptFields:
+    form_date: str = '22.08.2025 11:28 мск'
+    amount: str = '0,01 RUR'
+    commission: str = '0 RUR'
+    # The recipient field in the template contains a trailing space before
+    # the line break. Keep the same default so regenerating the reference
+    # PDF does not rely on implicit padding logic.
+    recipient: str = 'Михаил Сергеевич К '
+    phone: str = '7й526247787'
+    bank: str = 'В-Банк'
+    account: str = '408178100088600й7530'
+    message: str = 'Перевод денеАнЕГ средств'
+
+
 def _format_msk(dt: datetime) -> str:
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=_MSK_TZ)
@@ -135,6 +151,7 @@ def generate_pdf_with_ids(
     code4: str = "2001",
     tail7: str = "1571101",
     pp: str = "42",
+    fields: ReceiptFields | None = None,
     form_date: str = '22.08.2025 11:28 мск',
     amount: str = '0,01 RUR',
     commission: str = '0 RUR',
@@ -154,12 +171,7 @@ def generate_pdf_with_ids(
     )
     operation = ids.generate_op_number(when, pp=pp)
     date_time = _format_msk(when)
-    generate_pdf(
-        date_time,
-        operation,
-        sbp_id,
-        file_id,
-        out_path,
+    fields = fields or ReceiptFields(
         form_date=form_date,
         amount=amount,
         commission=commission,
@@ -168,6 +180,14 @@ def generate_pdf_with_ids(
         bank=bank,
         account=account,
         message=message,
+    )
+    generate_pdf(
+        date_time,
+        operation,
+        sbp_id,
+        file_id,
+        out_path,
+        fields=fields,
     )
     return operation, sbp_id
 
@@ -178,32 +198,40 @@ def generate_pdf(
     file_id: str,
     out_path: pathlib.Path,
     *,
+    fields: ReceiptFields | None = None,
     form_date: str = '22.08.2025 11:28 мск',
     amount: str = '0,01 RUR',
     commission: str = '0 RUR',
-    # The recipient field in the template contains a trailing space
-    # before the line break. Keep the same default so regenerating the
-    # reference PDF does not rely on implicit padding logic.
     recipient: str = 'Михаил Сергеевич К ',
     phone: str = '7й526247787',
     bank: str = 'В-Банк',
     account: str = '408178100088600й7530',
     message: str = 'Перевод денеАнЕГ средств',
 ):
+    fields = fields or ReceiptFields(
+        form_date=form_date,
+        amount=amount,
+        commission=commission,
+        recipient=recipient,
+        phone=phone,
+        bank=bank,
+        account=account,
+        message=message,
+    )
     # prepare new uncompressed content
     new_content = CONTENT_TEMPLATE
     replacements = {
-        OLD_FORM_DATE: form_date,
-        OLD_AMOUNT: amount,
-        OLD_COMMISSION: commission,
+        OLD_FORM_DATE: fields.form_date,
+        OLD_AMOUNT: fields.amount,
+        OLD_COMMISSION: fields.commission,
         OLD_DATE: date_time,
         OLD_OPER: operation,
-        OLD_FIO: recipient,
-        OLD_PHONE: phone,
-        OLD_BANK: bank,
-        OLD_ACCOUNT: account,
+        OLD_FIO: fields.recipient,
+        OLD_PHONE: fields.phone,
+        OLD_BANK: fields.bank,
+        OLD_ACCOUNT: fields.account,
         OLD_ID: sbp_id,
-        OLD_MESSAGE: message,
+        OLD_MESSAGE: fields.message,
     }
     for old, new in replacements.items():
         enc_new = _encode(new)
