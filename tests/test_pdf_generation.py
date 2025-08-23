@@ -3,7 +3,12 @@ sys.path.append(str(pathlib.Path(__file__).resolve().parent.parent))
 from datetime import datetime, timezone, timedelta
 
 import ids
-from generate_pdf import generate_pdf, generate_pdf_with_ids, _encode
+from generate_pdf import (
+    generate_pdf,
+    generate_pdf_with_ids,
+    _encode,
+    ReceiptFields,
+)
 
 TEMPLATE_VALUES = (
     "18.08.2025 17:34:11 мск",
@@ -32,12 +37,7 @@ def _get_content(path: pathlib.Path) -> str:
 def test_custom_fields(tmp_path):
     out = tmp_path / "out.pdf"
     file_id = "1234567890abcdef1234567890abcdef"
-    generate_pdf(
-        "01.01.2025 00:00 мск",
-        "OP123",
-        "ID456",
-        file_id,
-        out,
+    fields = ReceiptFields(
         form_date="02.02.2025 01:01 мск",
         amount="1,23 RUR",
         commission="1 RUR",
@@ -46,6 +46,14 @@ def test_custom_fields(tmp_path):
         bank="Банк",
         account="111111",
         message="Тест",
+    )
+    generate_pdf(
+        "01.01.2025 00:00 мск",
+        "OP123",
+        "ID456",
+        file_id,
+        out,
+        fields=fields,
     )
     content = _get_content(out)
     assert _encode("02.02.2025 01:01 мск") in content
