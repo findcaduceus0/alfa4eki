@@ -1,6 +1,9 @@
 import pathlib, sys
 sys.path.append(str(pathlib.Path(__file__).resolve().parent.parent))
-from generate_pdf import generate_pdf, _encode
+from datetime import datetime, timezone, timedelta
+
+import ids
+from generate_pdf import generate_pdf, generate_pdf_with_ids, _encode
 
 TEMPLATE_VALUES = (
     "18.08.2025 17:34:11 мск",
@@ -60,3 +63,18 @@ def test_custom_fields(tmp_path):
     assert (
         f"<{file_id}><{file_id}>".encode("ascii") in trailer
     )
+
+
+def test_generate_pdf_with_ids(tmp_path):
+    ids._SBP_COUNTER.clear()
+    ids._OP_COUNTER.clear()
+    when = datetime(2025, 8, 17, 22, 41, 38, tzinfo=timezone(timedelta(hours=3)))
+    out = tmp_path / "out.pdf"
+    file_id = "1234567890abcdef1234567890abcdef"
+    op, sbp = generate_pdf_with_ids(when, file_id, out)
+    assert op == "C421708250000001"
+    assert sbp == "B52291941387310K0000120011571101"
+    content = _get_content(out)
+    assert _encode("17.08.2025 22:41:38 мск ") in content
+    assert _encode(f"{op} ") in content
+    assert _encode(sbp) in content
