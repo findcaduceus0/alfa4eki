@@ -1,12 +1,15 @@
-import zlib, pathlib, io
+import os, zlib, pathlib, io
 from dataclasses import dataclass
 from datetime import datetime, timezone, timedelta
 from typing import Dict, Tuple
 
 import ids
 
-TEMPLATE_PATH = pathlib.Path('pdf 16.pdf')
-CHARMAP_PATH = pathlib.Path('pdf.pdf')
+# Allow overriding template and charmap via environment variables so the
+# generator can reproduce different reference PDFs without modifying the
+# source code.
+TEMPLATE_PATH = pathlib.Path(os.environ.get("PDF_TEMPLATE", "pdf 16.pdf"))
+CHARMAP_PATH = pathlib.Path(os.environ.get("CHARMAP_PDF", "pdf.pdf"))
 
 
 def _extract_char_map(path: pathlib.Path) -> Dict[str, str]:
