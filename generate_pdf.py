@@ -1,5 +1,8 @@
-import zlib, re, pathlib, io
-from typing import Dict
+import zlib, pathlib, io
+from datetime import datetime, timezone, timedelta
+from typing import Dict, Tuple
+
+import ids
 
 TEMPLATE_PATH = pathlib.Path('pdf 16.pdf')
 CHARMAP_PATH = pathlib.Path('pdf.pdf')
@@ -92,6 +95,16 @@ def _parse_template():
 
 OBJECTS, ORDER, CHAR_TO_CODE, CONTENT_TEMPLATE = _parse_template()
 
+_MSK_TZ = timezone(timedelta(hours=3))
+
+
+def _format_msk(dt: datetime) -> str:
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=_MSK_TZ)
+    else:
+        dt = dt.astimezone(_MSK_TZ)
+    return dt.strftime("%d.%m.%Y %H:%M:%S мск")
+
 # precompute hex strings for fields in template
 
 def _encode(text: str) -> str:
@@ -109,6 +122,54 @@ OLD_BANK = _encode('В-Банк')
 OLD_ACCOUNT = _encode('408178100088600й7530')
 OLD_ID   = _encode('A52301434118691P0000060011571101')
 OLD_MESSAGE = _encode('Перевод денеАнЕГ средств')
+
+
+def generate_pdf_with_ids(
+    when: datetime,
+    file_id: str,
+    out_path: pathlib.Path,
+    *,
+    prefix: str = "B",
+    node: str = "7310",
+    route: str = "K",
+    code4: str = "2001",
+    tail7: str = "1571101",
+    pp: str = "42",
+    form_date: str = '22.08.2025 11:28 мск',
+    amount: str = '0,01 RUR',
+    commission: str = '0 RUR',
+    recipient: str = 'Михаил Сергеевич К ',
+    phone: str = '7й526247787',
+    bank: str = 'В-Банк',
+    account: str = '408178100088600й7530',
+    message: str = 'Перевод денеАнЕГ средств',
+) -> Tuple[str, str]:
+    sbp_id = ids.generate_sbp_id(
+        when,
+        prefix=prefix,
+        node=node,
+        route=route,
+        code4=code4,
+        tail7=tail7,
+    )
+    operation = ids.generate_op_number(when, pp=pp)
+    date_time = _format_msk(when)
+    generate_pdf(
+        date_time,
+        operation,
+        sbp_id,
+        file_id,
+        out_path,
+        form_date=form_date,
+        amount=amount,
+        commission=commission,
+        recipient=recipient,
+        phone=phone,
+        bank=bank,
+        account=account,
+        message=message,
+    )
+    return operation, sbp_id
 
 def generate_pdf(
     date_time: str,
@@ -179,33 +240,78 @@ if __name__ == '__main__':
     import argparse
 
     parser = argparse.ArgumentParser(description='Generate PDF receipt')
-    parser.add_argument('date_time')
-    parser.add_argument('operation')
-    parser.add_argument('sbp_id')
-    parser.add_argument('file_id')
-    parser.add_argument('output')
-    parser.add_argument('--form-date', default='22.08.2025 11:28 мск')
-    parser.add_argument('--amount', default='0,01 RUR')
-    parser.add_argument('--commission', default='0 RUR')
-    parser.add_argument('--recipient', default='Михаил Сергеевич К ')
-    parser.add_argument('--phone', default='7й526247787')
-    parser.add_argument('--bank', default='В-Банк')
-    parser.add_argument('--account', default='408178100088600й7530')
-    parser.add_argument('--message', default='Перевод денеАнЕГ средств')
+    sub = parser.add_subparsers(dest='mode', required=True)
+
+    manual = sub.add_parser('manual', help='use explicit identifiers')
+    manual.add_argument('date_time')
+    manual.add_argument('operation')
+    manual.add_argument('sbp_id')
+    manual.add_argument('file_id')
+    manual.add_argument('output')
+    manual.add_argument('--form-date', default='22.08.2025 11:28 мск')
+    manual.add_argument('--amount', default='0,01 RUR')
+    manual.add_argument('--commission', default='0 RUR')
+    manual.add_argument('--recipient', default='Михаил Сергеевич К ')
+    manual.add_argument('--phone', default='7й526247787')
+    manual.add_argument('--bank', default='В-Банк')
+    manual.add_argument('--account', default='408178100088600й7530')
+    manual.add_argument('--message', default='Перевод денеАнЕГ средств')
+
+    auto = sub.add_parser('auto', help='generate identifiers automatically')
+    auto.add_argument('when', help='ISO timestamp')
+    auto.add_argument('file_id')
+    auto.add_argument('output')
+    auto.add_argument('--prefix', default='B')
+    auto.add_argument('--node', default='7310')
+    auto.add_argument('--route', default='K')
+    auto.add_argument('--code4', default='2001')
+    auto.add_argument('--tail7', default='1571101')
+    auto.add_argument('--pp', default='42')
+    auto.add_argument('--form-date', default='22.08.2025 11:28 мск')
+    auto.add_argument('--amount', default='0,01 RUR')
+    auto.add_argument('--commission', default='0 RUR')
+    auto.add_argument('--recipient', default='Михаил Сергеевич К ')
+    auto.add_argument('--phone', default='7й526247787')
+    auto.add_argument('--bank', default='В-Банк')
+    auto.add_argument('--account', default='408178100088600й7530')
+    auto.add_argument('--message', default='Перевод денеАнЕГ средств')
+
     args = parser.parse_args()
 
-    generate_pdf(
-        args.date_time,
-        args.operation,
-        args.sbp_id,
-        args.file_id,
-        pathlib.Path(args.output),
-        form_date=args.form_date,
-        amount=args.amount,
-        commission=args.commission,
-        recipient=args.recipient,
-        phone=args.phone,
-        bank=args.bank,
-        account=args.account,
-        message=args.message,
-    )
+    if args.mode == 'manual':
+        generate_pdf(
+            args.date_time,
+            args.operation,
+            args.sbp_id,
+            args.file_id,
+            pathlib.Path(args.output),
+            form_date=args.form_date,
+            amount=args.amount,
+            commission=args.commission,
+            recipient=args.recipient,
+            phone=args.phone,
+            bank=args.bank,
+            account=args.account,
+            message=args.message,
+        )
+    else:
+        when = datetime.fromisoformat(args.when)
+        generate_pdf_with_ids(
+            when,
+            args.file_id,
+            pathlib.Path(args.output),
+            prefix=args.prefix,
+            node=args.node,
+            route=args.route,
+            code4=args.code4,
+            tail7=args.tail7,
+            pp=args.pp,
+            form_date=args.form_date,
+            amount=args.amount,
+            commission=args.commission,
+            recipient=args.recipient,
+            phone=args.phone,
+            bank=args.bank,
+            account=args.account,
+            message=args.message,
+        )
