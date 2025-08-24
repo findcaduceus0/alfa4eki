@@ -1,4 +1,4 @@
-import os, zlib, pathlib, io
+import os, zlib, pathlib, io, re
 from dataclasses import dataclass
 from datetime import datetime, timezone, timedelta
 from typing import Dict, Tuple
@@ -95,9 +95,44 @@ def _parse_template():
     # get uncompressed content template
     raw_content = reader.get_object(IndirectObject(9,0,reader))._data
     uncomp = zlib.decompress(raw_content).decode('latin1')
-    return objects, order, char_to_code, uncomp
 
-OBJECTS, ORDER, CHAR_TO_CODE, CONTENT_TEMPLATE = _parse_template()
+    # discover placeholders for dynamic fields by decoding content stream
+    segments = re.findall(r'<([0-9A-F]+)>', uncomp)
+    decoded = [
+        ''.join(code_to_char.get(seg[i:i+4], '') for i in range(0, len(seg), 4)).replace('\u00A0', ' ')
+        for seg in segments
+    ]
+    labels = {
+        'Сформирована': 'form_date',
+        'Сумма перевода': 'amount',
+        'Комиссия': 'commission',
+        'Дата и время перевода': 'date',
+        'Номер операции': 'oper',
+        'Получатель': 'recipient',
+        'Номер телефона получателя': 'phone',
+        'Банк получателя': 'bank',
+        'Счёт списания': 'account',
+        'Идентификатор операции в СБП': 'id',
+        'Сообщение получателю': 'message',
+    }
+    placeholders: Dict[str, str] = {}
+    i = 0
+    while i < len(decoded):
+        text = decoded[i].strip()
+        if text in labels:
+            key = labels[text]
+            i += 1
+            while i < len(decoded) and decoded[i].strip() == '':
+                i += 1
+            if i < len(decoded):
+                placeholders[key] = segments[i]
+        else:
+            i += 1
+    if len(placeholders) != len(labels):
+        raise ValueError('failed to locate all placeholders in template')
+    return objects, order, char_to_code, uncomp, placeholders
+
+OBJECTS, ORDER, CHAR_TO_CODE, CONTENT_TEMPLATE, PLACEHOLDERS = _parse_template()
 
 _MSK_TZ = timezone(timedelta(hours=3))
 
@@ -124,23 +159,9 @@ def _format_msk(dt: datetime) -> str:
         dt = dt.astimezone(_MSK_TZ)
     return dt.strftime("%d.%m.%Y %H:%M:%S мск")
 
-# precompute hex strings for fields in template
-
 def _encode(text: str) -> str:
     text = text.replace(' ', '\u00A0')
     return ''.join(CHAR_TO_CODE[ch] for ch in text)
-
-OLD_FORM_DATE = _encode('22.08.2025 11:28 мск')
-OLD_AMOUNT = _encode('0,01 RUR ')
-OLD_COMMISSION = _encode('0 RUR ')
-OLD_DATE = _encode('18.08.2025 17:34:11 мск ')
-OLD_OPER = _encode('C421808250875533 ')
-OLD_FIO = _encode('Михаил Сергеевич К ')
-OLD_PHONE = _encode('7й526247787')
-OLD_BANK = _encode('В-Банк')
-OLD_ACCOUNT = _encode('408178100088600й7530')
-OLD_ID   = _encode('A52301434118691P0000060011571101')
-OLD_MESSAGE = _encode('Перевод денеАнЕГ средств')
 
 
 def generate_pdf_with_ids(
@@ -224,17 +245,17 @@ def generate_pdf(
     # prepare new uncompressed content
     new_content = CONTENT_TEMPLATE
     replacements = {
-        OLD_FORM_DATE: fields.form_date,
-        OLD_AMOUNT: fields.amount,
-        OLD_COMMISSION: fields.commission,
-        OLD_DATE: date_time,
-        OLD_OPER: operation,
-        OLD_FIO: fields.recipient,
-        OLD_PHONE: fields.phone,
-        OLD_BANK: fields.bank,
-        OLD_ACCOUNT: fields.account,
-        OLD_ID: sbp_id,
-        OLD_MESSAGE: fields.message,
+        PLACEHOLDERS['form_date']: fields.form_date,
+        PLACEHOLDERS['amount']: fields.amount,
+        PLACEHOLDERS['commission']: fields.commission,
+        PLACEHOLDERS['date']: date_time,
+        PLACEHOLDERS['oper']: operation,
+        PLACEHOLDERS['recipient']: fields.recipient,
+        PLACEHOLDERS['phone']: fields.phone,
+        PLACEHOLDERS['bank']: fields.bank,
+        PLACEHOLDERS['account']: fields.account,
+        PLACEHOLDERS['id']: sbp_id,
+        PLACEHOLDERS['message']: fields.message,
     }
     for old, new in replacements.items():
         enc_new = _encode(new)
