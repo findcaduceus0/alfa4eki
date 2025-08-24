@@ -79,10 +79,28 @@ def test_generate_pdf_with_ids(tmp_path):
     when = datetime(2025, 8, 17, 22, 41, 38, tzinfo=timezone(timedelta(hours=3)))
     out = tmp_path / "out.pdf"
     file_id = "1234567890abcdef1234567890abcdef"
-    op, sbp = generate_pdf_with_ids(when, file_id, out)
+    op, sbp, fid = generate_pdf_with_ids(when, file_id, out)
+    assert fid == file_id
     assert op == "C421708250000001"
     assert sbp == "B52291941387310K0000120011571101"
     content = _get_content(out)
     assert _encode("17.08.2025 22:41:38 мск ") in content
     assert _encode(f"{op} ") in content
     assert _encode(sbp) in content
+    trailer = out.read_bytes()[-100:]
+    assert f"<{fid}><{fid}>".encode("ascii") in trailer
+
+
+def test_generate_pdf_with_ids_auto_file_id(tmp_path):
+    ids._SBP_COUNTER.clear()
+    ids._OP_COUNTER.clear()
+    when = datetime(2025, 8, 17, 22, 41, 38, tzinfo=timezone(timedelta(hours=3)))
+    out = tmp_path / "out.pdf"
+    op, sbp, fid = generate_pdf_with_ids(when, None, out)
+    assert len(fid) == 32
+    content = _get_content(out)
+    assert _encode("17.08.2025 22:41:38 мск ") in content
+    assert _encode(f"{op} ") in content
+    assert _encode(sbp) in content
+    trailer = out.read_bytes()[-100:]
+    assert f"<{fid}><{fid}>".encode("ascii") in trailer

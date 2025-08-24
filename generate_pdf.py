@@ -166,7 +166,7 @@ def _encode(text: str) -> str:
 
 def generate_pdf_with_ids(
     when: datetime,
-    file_id: str,
+    file_id: str | None,
     out_path: pathlib.Path,
     *,
     prefix: str = "B",
@@ -184,7 +184,7 @@ def generate_pdf_with_ids(
     bank: str = 'В-Банк',
     account: str = '408178100088600й7530',
     message: str = 'Перевод денеАнЕГ средств',
-) -> Tuple[str, str]:
+) -> Tuple[str, str, str]:
     sbp_id = ids.generate_sbp_id(
         when,
         prefix=prefix,
@@ -195,6 +195,10 @@ def generate_pdf_with_ids(
     )
     operation = ids.generate_op_number(when, pp=pp)
     date_time = _format_msk(when)
+    if file_id is None:
+        file_id = ids.generate_file_id()
+    else:
+        ids.validate_file_id(file_id)
     fields = fields or ReceiptFields(
         form_date=form_date,
         amount=amount,
@@ -213,7 +217,7 @@ def generate_pdf_with_ids(
         out_path,
         fields=fields,
     )
-    return operation, sbp_id
+    return operation, sbp_id, file_id
 
 def generate_pdf(
     date_time: str,
@@ -232,6 +236,7 @@ def generate_pdf(
     account: str = '408178100088600й7530',
     message: str = 'Перевод денеАнЕГ средств',
 ):
+    ids.validate_file_id(file_id)
     fields = fields or ReceiptFields(
         form_date=form_date,
         amount=amount,
@@ -311,7 +316,7 @@ if __name__ == '__main__':
 
     auto = sub.add_parser('auto', help='generate identifiers automatically')
     auto.add_argument('when', help='ISO timestamp')
-    auto.add_argument('file_id')
+    auto.add_argument('file_id', nargs='?')
     auto.add_argument('output')
     auto.add_argument('--prefix', default='B')
     auto.add_argument('--node', default='7310')

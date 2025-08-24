@@ -2,7 +2,7 @@ import pathlib, sys
 sys.path.append(str(pathlib.Path(__file__).resolve().parent.parent))
 from datetime import datetime, timezone, timedelta
 
-
+import pytest
 import ids
 
 
@@ -40,3 +40,11 @@ def test_sbp_sequence_increment():
     second = ids.generate_sbp_id(WHEN)
     assert first[16:21] == "00001"
     assert second[16:21] == "00002"
+
+
+def test_generate_file_id():
+    fid = ids.generate_file_id()
+    assert len(fid) == 32
+    ids.validate_file_id(fid)
+    with pytest.raises(ValueError):
+        ids.validate_file_id("xyz")
