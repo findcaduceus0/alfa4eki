@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone, timedelta
-import re
+import os, hashlib, re
 from typing import Dict, Tuple
 
 # Regular expressions for validation
@@ -13,12 +13,19 @@ SBP_ID_RE = re.compile(
 OP_NUMBER_RE = re.compile(
     r"^C(?P<pp>\d{2})(?P<dd>\d{2})(?P<mm>\d{2})(?P<yy>\d{2})(?P<serial>\d{7})$"
 )
+FILE_ID_RE = re.compile(r"^[0-9a-f]{32}$")
 
 # Internal counters
 _SBP_COUNTER: Dict[Tuple[datetime, str, str], int] = {}
 _OP_COUNTER: Dict[Tuple[str, str], int] = {}
 
 _MSK_TZ = timezone(timedelta(hours=3))
+
+
+def generate_file_id() -> str:
+    """Return 32 lowercase hex characters for PDF /ID field."""
+    rand = os.urandom(16)
+    return hashlib.md5(rand).hexdigest()
 
 
 def _ensure_aware(dt: datetime) -> datetime:
@@ -72,4 +79,9 @@ def validate_sbp_id(id32: str) -> None:
 def validate_op_number(no16: str) -> None:
     if not OP_NUMBER_RE.fullmatch(no16):
         raise ValueError("Invalid operation number")
+
+
+def validate_file_id(fid: str) -> None:
+    if not FILE_ID_RE.fullmatch(fid):
+        raise ValueError("Invalid file ID")
 
